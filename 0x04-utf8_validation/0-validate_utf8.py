@@ -1,49 +1,61 @@
 #!/usr/bin/python3
+"""UTF-8 validation module.
+"""
+
 
 def validUTF8(data):
-    # Number of bytes in the current UTF-8 character
-    num_bytes = 0
-
-    # Masks for checking the most significant bits of a byte
-    mask1 = 1 << 7  # 10000000
-    mask2 = 1 << 6  # 01000000
-
-    # Iterate over each byte in the data
-    for byte in data:
-        # Get the 8 least significant bits of the byte
-        byte = byte & 0xFF
-
-        if num_bytes == 0:
-            # Determine the number of bytes in the UTF-8 character
-            mask = 1 << 7
-            while mask & byte:
-                num_bytes += 1
-                mask >>= 1
-
-            # 1 byte character or invalid initial byte
-            if num_bytes == 0:
-                continue
-
-            # If the number of bytes is greater than 4 or equal to 1, it's invalid
-            if num_bytes == 1 or num_bytes > 4:
+    """Checks if a list of integers are valid UTF-8 codepoints.
+    See <https://datatracker.ietf.org/doc/html/rfc3629#page-4>
+    """
+    skip = 0
+    n = len(data)
+    for i in range(n):
+        if skip > 0:
+            skip -= 1
+            continue
+        if type(data[i]) != int or data[i] < 0 or data[i] > 0x10ffff:
+            return False
+        elif data[i] <= 0x7f:
+            skip = 0
+        elif data[i] & 0b11111000 == 0b11110000:
+            # 4-byte utf-8 character encoding
+            span = 4
+            if n - i >= span:
+                next_body = list(map(
+                    lambda x: x & 0b11000000 == 0b10000000,
+                    data[i + 1: i + span],
+                ))
+                if not all(next_body):
+                    return False
+                skip = span - 1
+            else:
+                return False
+        elif data[i] & 0b11110000 == 0b11100000:
+            # 3-byte utf-8 character encoding
+            span = 3
+            if n - i >= span:
+                next_body = list(map(
+                    lambda x: x & 0b11000000 == 0b10000000,
+                    data[i + 1: i + span],
+                ))
+                if not all(next_body):
+                    return False
+                skip = span - 1
+            else:
+                return False
+        elif data[i] & 0b11100000 == 0b11000000:
+            # 2-byte utf-8 character encoding
+            span = 2
+            if n - i >= span:
+                next_body = list(map(
+                    lambda x: x & 0b11000000 == 0b10000000,
+                    data[i + 1: i + span],
+                ))
+                if not all(next_body):
+                    return False
+                skip = span - 1
+            else:
                 return False
         else:
-            # Check that the byte starts with '10'
-            if not (byte & mask1 and not (byte & mask2)):
-                return False
-
-        # Decrement the number of bytes to process
-        num_bytes -= 1
-
-    # If we finished processing all bytes and there are no more expected continuation bytes
-    return num_bytes == 0
-
- Test cases
-data = [65]
-print(validUTF8(data))  # True
-
-data = [80, 121, 116, 104, 111, 110, 32, 105, 115, 32, 99, 111, 111, 108, 33]
-print(validUTF8(data))  # True
-
-data = [229, 65, 127, 256]
-print(validUTF8(data))  # False
+            return False
+    return True
